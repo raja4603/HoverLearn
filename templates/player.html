@@ -1,0 +1,334 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div style="position: relative; width: 100%; height: 90vh; background: black; display: flex; justify-content: center; overflow: hidden;">
+    
+    <!-- 1. THE VIDEO PLAYER -->
+    <video id="mainVideo" width="100%" height="100%" controls style="outline: none;">
+        <source src="{{ video.video_file.url }}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+
+    <!-- 2. SUBTITLE OVERLAY LAYER -->
+    <!-- Positioned at the bottom, transparent -->
+    <div id="subtitle-layer" 
+         style="position: absolute; bottom: 15%; width: 80%; text-align: center; pointer-events: none; z-index: 10;">
+        
+        {% for line in subtitles %}
+        <!-- Lines are hidden by default, shown via JS based on timestamp -->
+        <div class="sub-line" 
+             data-start="{{ line.start }}" 
+             data-end="{{ line.end }}" 
+             style="display: none; pointer-events: auto;">
+             
+            {% for word in line.words %}
+                <!-- THE INTERACTIVE WORD -->
+                <span class="hover-word"
+                      hx-get="/get-def/{{ word }}"
+                      hx-trigger="mouseenter"
+                      hx-target="#definition-box"
+                      onmouseenter="pauseVideo()"
+                      onmouseleave="prepareResume()"
+                      style="
+                        background-color: rgba(0,0,0,0.5); 
+                        color: white; 
+                        font-size: 26px; 
+                        font-weight: bold;
+                        padding: 4px 8px; 
+                        margin: 0 2px;
+                        border-radius: 4px; 
+                        cursor: pointer;
+                        display: inline-block;
+                        text-shadow: 2px 2px 4px #000;
+                        transition: all 0.2s;">
+                    {{ word }}
+                </span>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- 3. THE DEFINITION TOOLTIP (Floating) -->
+    <!-- We add mouse events here too so it stays open when you try to click Save -->
+    <div id="definition-box" 
+         onmouseenter="cancelResume()"
+         onmouseleave="prepareResume()"
+         style="position: absolute; top: 20%; right: 10%; z-index: 20;">
+         <!-- HTMX will fill this content -->
+    </div>
+
+
+
+    <!-- 4. NOTES SIDEBAR (hidden by default) -->
+    <div id="notes-pane" style="position: absolute; top: 12%; right: -380px; width: 340px; max-height: 75vh; overflow-y: auto; z-index: 25; background: #1f1f1f; border-left: 1px solid #E50914; border-radius:8px; padding:12px; color:#eee; box-shadow:0 8px 24px rgba(0,0,0,0.6); transition: right 0.25s ease;">
+        <h3 style="margin-top:0;">📝</h3>
+
+        <!-- Note form (HTMX) -->
+        <form id="noteForm" method="post" hx-post="{% url 'save_note' video.id %}" hx-target="#notes-list" hx-swap="innerHTML">
+            {% csrf_token %}
+            <textarea name="content" rows="3" placeholder="Write a note..." style="width:100%; padding:8px; background:#111; color:#fff; border-radius:4px; border:1px solid #222;"></textarea>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+                <button type="submit" style="background:#46d369; color:#000; border:none; padding:8px 10px; border-radius:6px;">Save</button>
+                <button type="button" id="save-ts" style="background:#333; color:#fff; border:none; padding:8px 10px; border-radius:6px;">Save at current time</button>
+                <input type="hidden" name="timestamp" id="noteTimestamp" value="" />
+            </div>
+        </form>
+
+        <!-- Notes list (this will be swapped by HTMX) -->
+        <div id="notes-list" style="margin-top:12px;">
+            {% include 'partials/video_notes_list.html' %}
+        </div>
+    </div>
+
+</div>
+
+<!-- JAVASCRIPT LOGIC -->
+<script>
+    const video = document.getElementById('mainVideo');
+    const lines = document.querySelectorAll('.sub-line');
+    const definitionBox = document.getElementById('definition-box');
+    const notesPane = document.getElementById('notes-pane');
+
+    function toggleNotesPane() {
+        const navBtn = document.getElementById('navNotesBtnLocal');
+        if (notesPane.style.right && notesPane.style.right !== '-380px') {
+            notesPane.style.right = '-380px';
+            if (navBtn) navBtn.innerText = '📝 Notes';
+        } else {
+            notesPane.style.right = '20px';
+            if (navBtn) navBtn.innerText = 'Close 📝';
+            // focus textarea for faster note taking
+            setTimeout(() => {
+                const ta = document.querySelector('#noteForm textarea');
+                if (ta) ta.focus();
+            }, 150);
+        }
+    }
+
+    let resumeTimer = null;
+
+    // 1. Sync Subtitles with Video Time
+    video.addEventListener('timeupdate', () => {
+        const t = video.currentTime;
+        lines.forEach(line => {
+            const start = parseFloat(line.dataset.start);
+            const end = parseFloat(line.dataset.end);
+            
+            // Show line if current time is within range
+            if (t >= start && t <= end) {
+                line.style.display = 'block';
+            } else {
+                line.style.display = 'none';
+            }
+        });
+    });
+
+    // 2. Pause Video (Immediate)
+    function pauseVideo() {
+        // Clear any pending resume action
+        if (resumeTimer) clearTimeout(resumeTimer);
+        video.pause();
+    }
+
+    // 3. Prepare to Resume (Delayed)
+    function prepareResume() {
+        resumeTimer = setTimeout(() => {
+            video.play();
+            definitionBox.innerHTML = ""; 
+        }, 300);
+    }
+
+    // 4. Cancel Resume
+    function cancelResume() {
+        if (resumeTimer) clearTimeout(resumeTimer);
+    }
+
+    // Remove any lingering references to old toggle and ensure there's only one nav button
+    if (!notesPane._originalParent) {
+        notesPane._originalParent = notesPane.parentNode;
+        notesPane._originalNext = notesPane.nextSibling;
+    }
+
+    // Insert a video-only Notes button into the navbar (left of search)
+    function ensureNavNotesButton() {
+        // Remove any existing nav button instances first (avoid ghosts)
+        document.querySelectorAll('#navNotesBtnLocal').forEach(el => el.remove());
+
+        if (document.getElementById('navNotesBtnLocal')) return;
+        const navbar = document.querySelector('.navbar');
+        const searchForm = navbar ? navbar.querySelector('form') : null;
+        if (!searchForm) return;
+        const btn = document.createElement('a');
+        btn.id = 'navNotesBtnLocal';
+        btn.href = '#';
+        btn.innerText = '📝 Notes';
+        btn.style.cssText = 'display:inline-flex; align-items:center; padding:6px 10px; background:#1f1f1f; color:#fff; border:1px solid #E50914; border-radius:6px; margin-right:8px; text-decoration:none; cursor:pointer;';
+        btn.addEventListener('click', (e) => { e.preventDefault(); toggleNotesPane(); });
+        // Remember where to put it back
+        btn._originalParent = searchForm.parentNode;
+        btn._originalNext = searchForm;
+        searchForm.parentNode.insertBefore(btn, searchForm);
+    }
+
+    // Ensure the navbar button exists on load
+    ensureNavNotesButton();
+
+    // Keep references and original inline styles for subtitle & tooltip so we can restore on exit
+    if (!document.getElementById('subtitle-layer')._originalParent) {
+        const sl = document.getElementById('subtitle-layer');
+        sl._originalParent = sl.parentNode;
+        sl._originalNext = sl.nextSibling;
+        sl._originalStyle = sl.getAttribute('style') || '';
+    }
+    if (!document.getElementById('definition-box')._originalParent) {
+        const db = document.getElementById('definition-box');
+        db._originalParent = db.parentNode;
+        db._originalNext = db.nextSibling;
+        db._originalStyle = db.getAttribute('style') || '';
+    }
+
+    // When the video enters fullscreen, hide overlays so only the video is visible; restore them on exit
+    // (This matches the user preference to see *only* the video in fullscreen.)
+    function handleFullscreenChange() {
+        const fs = document.fullscreenElement;
+        const navBtn = document.getElementById('navNotesBtnLocal');
+        const sl = document.getElementById('subtitle-layer');
+        const db = document.getElementById('definition-box');
+
+        // Save original inline styles if not already saved
+        if (sl && sl._originalStyle === undefined) sl._originalStyle = sl.getAttribute('style') || '';
+        if (db && db._originalStyle === undefined) db._originalStyle = db.getAttribute('style') || '';
+        if (navBtn && navBtn._originalStyle === undefined) navBtn._originalStyle = navBtn.getAttribute('style') || '';
+        if (notesPane && notesPane._originalStyle === undefined) notesPane._originalStyle = notesPane.getAttribute('style') || '';
+
+        const entering = !!fs && (fs === video || fs.contains(video));
+
+        if (entering) {
+            try {
+                // Hide overlays (captions, definition tooltip, notes pane, nav button)
+                if (sl) sl.style.display = 'none';
+                if (db) db.style.display = 'none';
+                if (navBtn) navBtn.style.display = 'none';
+                if (notesPane) notesPane.style.display = 'none';
+            } catch (e) { console.debug('hide overlays failed', e); }
+        } else {
+            try {
+                // Restore original inline styles
+                if (sl && sl._originalStyle !== undefined) sl.setAttribute('style', sl._originalStyle);
+                if (db && db._originalStyle !== undefined) db.setAttribute('style', db._originalStyle);
+                if (navBtn && navBtn._originalStyle !== undefined) navBtn.setAttribute('style', navBtn._originalStyle);
+                if (notesPane && notesPane._originalStyle !== undefined) notesPane.setAttribute('style', notesPane._originalStyle);
+
+                // Ensure notes pane is closed after restore
+                if (notesPane) notesPane.style.right = '-380px';
+            } catch (e) { console.debug('restore overlays failed', e); }
+        }
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    // Set saved playback position when metadata is loaded
+    video.addEventListener('loadedmetadata', () => {
+        try {
+            const lastPos = parseFloat('{{ last_position|default:0 }}');
+            if (lastPos && !isNaN(lastPos) && lastPos > 0 && lastPos < (video.duration - 1)) {
+                video.currentTime = lastPos;
+            }
+        } catch (e) {
+            console.warn('Could not set last_position', e);
+        }
+    });
+
+    // Helper to obtain CSRF token from cookies
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Periodically send playback position to server
+    const progressTickerMs = 5000; // every 5 seconds
+    setInterval(() => {
+        try {
+            fetch("{% url 'update_history' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: new URLSearchParams({
+                    video_id: '{{ video.id }}',
+                    current_time: video.currentTime
+                })
+            }).catch(e => console.debug('progress update failed', e));
+        } catch (e) {
+            console.debug('progress loop error', e);
+        }
+    }, progressTickerMs);
+
+    // Also send on unload/visibilitychange to capture final position
+    function sendFinalProgress() {
+        try {
+            navigator.sendBeacon && navigator.sendBeacon("{% url 'update_history' %}", new URLSearchParams({video_id: '{{ video.id }}', current_time: video.currentTime}));
+        } catch (e) { console.debug('sendFinalProgress', e); }
+    }
+    window.addEventListener('beforeunload', sendFinalProgress);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) sendFinalProgress(); });
+
+    // Save timestamp into hidden field and submit note form
+    const saveTsBtn = document.getElementById('save-ts');
+    if (saveTsBtn) {
+        saveTsBtn.addEventListener('click', () => {
+            document.getElementById('noteTimestamp').value = video.currentTime.toFixed(2);
+            // Submit the form — HTMX will intercept and send it
+            const form = document.getElementById('noteForm');
+            if (form.requestSubmit) form.requestSubmit(); else form.submit();
+        });
+    }
+
+    // Delegated handler for timestamp links (works in player or when used elsewhere)
+    document.body.addEventListener('click', (evt) => {
+        const a = evt.target.closest && evt.target.closest('.note-seek');
+        if (!a) return;
+        evt.preventDefault();
+        const ts = parseFloat(a.dataset.ts);
+        const watchUrl = a.dataset.watchUrl;
+        const playerEl = document.getElementById('mainVideo');
+        if (!isNaN(ts) && playerEl) {
+            try {
+                playerEl.currentTime = ts;
+                playerEl.play();
+            } catch (e) { console.debug('seek failed', e); }
+            return;
+        }
+        // Fallback: navigate to the watch page at the timestamp
+        if (watchUrl) {
+            window.location.href = watchUrl;
+        }
+    });
+
+    // Clear the form after a successful note save (HTMX hook)
+    const saveNoteUrl = "{% url 'save_note' video.id %}";
+    document.body.addEventListener('htmx:afterRequest', (evt) => {
+        try {
+            const path = evt.detail.path || '';
+            if (path && path.indexOf(saveNoteUrl) !== -1 && evt.detail.requestConfig.verb === 'POST') {
+                const tf = document.querySelector('#noteForm textarea');
+                if (tf) tf.value = '';
+                const tsf = document.getElementById('noteTimestamp');
+                if (tsf) tsf.value = '';
+            }
+        } catch(e) { }
+    });
+</script>
+
+{% endblock %}

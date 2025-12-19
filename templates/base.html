@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HoverLearn</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        /* GLOBAL NETFLIX STYLES */
+        body { 
+            background-color: #141414; 
+            color: #ffffff; 
+            font-family: 'Roboto', sans-serif; 
+            margin: 0; 
+            padding: 0;
+            overflow-x: hidden;
+        }
+        a { text-decoration: none; color: white; transition: 0.3s; }
+        
+        /* NAVBAR */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 100;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%);
+            box-sizing: border-box;
+        }
+        .brand { 
+            color: #E50914; 
+            font-size: 28px; 
+            font-weight: bold; 
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .nav-links a {
+            margin-left: 20px;
+            font-size: 14px;
+            color: #e5e5e5;
+        }
+        .nav-links a:hover { color: #b3b3b3; }
+    </style>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    
+    <div class="navbar">
+        <div style="display:flex; align-items:center; gap:20px;">
+            <div class="brand">Hoverlearn</div>
+        </div>
+
+        <div class="nav-links" style="display:flex; align-items:center; gap:12px;">
+            <!-- Search form placed on the RIGHT side of the navbar -->
+            <form method="get" action="{% url 'home' %}" style="display:inline-flex; align-items:center;">
+                <input type="search" name="q" placeholder="Search videos..." value="{{ q|default:'' }}"
+                       style="padding:6px 10px; border-radius:6px; border: none; width:220px; background:#333; color:#fff; outline: none;" />
+                <button type="submit" style="margin-left:8px; padding:6px 10px; background:#E50914; border:none; color:white; border-radius:6px;">Search</button>
+            </form>
+
+            <a href="{% url 'home' %}">Home</a>
+            <a href="{% url 'saved_list' %}">My List</a>
+            <!-- Logout Button -->
+            <a href="{% url 'logout' %}" style="background:#E50914; padding: 5px 10px; border-radius: 4px; margin-left:20px;">
+                Sign Out
+            </a>
+        </div>
+    </div>
+
+    {% block content %}{% endblock %}
+</body>
+</html>

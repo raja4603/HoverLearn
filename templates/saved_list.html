@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div style="padding: 40px; max-width: 1000px; margin: 0 auto;">
+    
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h1 style="color: white; margin: 0;">My Vocabulary List</h1>
+        
+    </div>
+
+    <!-- The Grid / List -->
+    {% if words %}
+        <div style="display: grid; gap: 15px;">
+            {% for item in words %}
+            <div id="word-row-{{ item.id }}" 
+                 style="background-color: #1f1f1f; padding: 20px; border-radius: 8px; display: flex; align-items: center; border-left: 4px solid #E50914;">
+                
+                <!-- Word Column -->
+                <div style="flex: 1;">
+                    <h3 style="margin: 0; color: #E50914; font-size: 22px; text-transform: capitalize;">
+                        {{ item.word }}
+                    </h3>
+                    {% if item.hindi %}
+                    <span style="color: #888; font-size: 14px;">{{ item.hindi }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Meaning Column -->
+                <div style="flex: 3; color: #ddd; padding: 0 20px; font-size: 15px; line-height: 1.4;">
+                    {{ item.meaning }}
+                    {% if item.synonyms %}
+                    <div style="margin-top: 5px; font-size: 12px; color: #666; font-style: italic;">
+                        Synonyms: {{ item.synonyms }}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Action Column -->
+                <div>
+                    <button hx-post="{% url 'delete_word' item.id %}" 
+                            hx-target="#word-row-{{ item.id }}" 
+                            hx-swap="outerHTML"
+                            style="background: transparent; border: 1px solid #444; color: #888; padding: 8px 12px; border-radius: 4px; cursor: pointer; transition: 0.2s;">
+                        Delete 🗑
+                    </button>
+                </div>
+
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div style="text-align: center; color: #666; margin-top: 50px;">
+            <h2>Your list is empty.</h2>
+            <p>Go watch a video and save some words!</p>
+        </div>
+    {% endif %}
+
+    <hr style="border:none; height:1px; background:#222; margin:30px 0;" />
+    <h2 id="video-notes" style="color:white; margin-bottom:16px;">My Video Notes</h2>
+
+    {% if notes and notes|length > 0 %}
+        <div style="display:flex; flex-direction:column; gap:12px;">
+            {% for n in notes %}
+                <div id="note-row-{{ n.id }}" style="background:#1b1b1b; padding:12px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; border-left: 4px solid #E50914;">
+                    <div style="flex:1;">
+                        <a href="{% url 'watch' n.video.id %}{% if n.timestamp %}?t={{ n.timestamp|floatformat:2 }}{% endif %}" style="color:#E50914; font-weight:700;">{{ n.video.title }}</a>
+                        <div style="color:#ccc; margin-top:6px;">{{ n.content }}</div>
+                    </div>
+                    <div style="margin-left:12px; text-align:right; color:#999; font-size:13px;">
+                        {% if n.timestamp %}
+                            <div style="background:#111; padding:6px 8px; border-radius:6px; color:#fff;">{{ n.formatted_timestamp }}</div>
+                        {% else %}
+                            <div style="color:#777;">No time</div>
+                        {% endif %}
+                        <div style="font-size:12px; color:#666; margin-top:8px;">{{ n.created_at|date:"M d, Y H:i" }}</div>
+                        <form method="post" hx-post="{% url 'delete_note' n.id %}" hx-target="#note-row-{{ n.id }}" hx-swap="outerHTML" style="margin-top:8px;">
+                            {% csrf_token %}
+                            <button type="submit" style="background:transparent; border:1px solid #444; color:#ff7b7b; padding:6px 8px; border-radius:6px; cursor:pointer;">Delete</button>
+                        </form>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div style="color:#666; margin-top:12px;">You have no notes yet. Add notes from the video player.</div>
+    {% endif %}
+
+</div>
+{% endblock %}

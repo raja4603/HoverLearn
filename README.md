@@ -158,9 +158,3 @@ admin.site.register(WatchHistory)
 
 ---
 
-If you want, I can:
-- Add a `README` section with example curl commands for the HTMX endpoints
-- Create a `CONTRIBUTING.md` and basic tests for key endpoints
-- Register `VideoNote`/`WatchHistory` in `admin.py` for you and run `makemigrations`/`migrate`
-
-Tell me which follow-up you'd like and I’ll implement it next.

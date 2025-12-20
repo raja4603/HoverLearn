@@ -26,5 +26,8 @@ urlpatterns = [
     path('video/<int:video_id>/save-note/', views.save_note, name='save_note'),
     path('note/<int:note_id>/delete/', views.delete_note, name='delete_note'),
     path('update-history/', views.update_history, name='update_history'),
+    
+    # Voting URL
+    path('vote/<int:video_id>/<str:vote_type>/', views.handle_vote, name='handle_vote'),
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

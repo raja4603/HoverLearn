@@ -57,9 +57,11 @@
          <!-- HTMX will fill this content -->
     </div>
 
+    <!-- 4. VOTE BUTTONS OVERLAY (NEW) -->
+    <!-- This includes the buttons from the partial file -->
+    {% include 'partials/vote_buttons.html' %}
 
-
-    <!-- 4. NOTES SIDEBAR (hidden by default) -->
+    <!-- 5. NOTES SIDEBAR (hidden by default) -->
     <div id="notes-pane" style="position: absolute; top: 12%; right: -380px; width: 340px; max-height: 75vh; overflow-y: auto; z-index: 25; background: #1f1f1f; border-left: 1px solid #E50914; border-radius:8px; padding:12px; color:#eee; box-shadow:0 8px 24px rgba(0,0,0,0.6); transition: right 0.25s ease;">
         <h3 style="margin-top:0;">📝</h3>
 

@@ -1,0 +1,51 @@
+<div id="vote-controls" style="position:absolute; bottom:8%; right:8%; z-index:30; display:flex; gap:8px; align-items:center;">
+    
+    <!-- Embedded CSS for vote buttons to keep logic clean -->
+    <style>
+        .vote-btn {
+            background-color: rgba(0, 0, 0, 0.6); /* Default dark background */
+            color: #fff;
+            border: none;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: background-color 0.2s;
+        }
+        
+        /* Active States */
+        .vote-btn.like-active {
+            background-color: #46d369; /* Green for Like */
+            color: white;
+        }
+        
+        .vote-btn.dislike-active {
+            background-color: #ff6b6b; /* Red for Dislike */
+            color: white;
+        }
+    </style>
+
+    <!-- LIKE BUTTON -->
+    <!-- We simply add the class 'like-active' if the user liked the video -->
+    <button hx-post="{% url 'handle_vote' video.id 'LIKE' %}" 
+            hx-target="#vote-controls" 
+            hx-swap="outerHTML"
+            class="vote-btn {% if vote_type == 'LIKE' %}like-active{% endif %}">
+        <span>👍</span> 
+        <span id="likeCount">{{ likes }}</span>
+    </button>
+
+    <!-- DISLIKE BUTTON -->
+    <!-- We simply add the class 'dislike-active' if the user disliked the video -->
+    <button hx-post="{% url 'handle_vote' video.id 'DISLIKE' %}" 
+            hx-target="#vote-controls" 
+            hx-swap="outerHTML"
+            class="vote-btn {% if vote_type == 'DISLIKE' %}dislike-active{% endif %}">
+        <span>👎</span> 
+        <span id="dislikeCount">{{ dislikes }}</span>
+    </button>
+
+</div>

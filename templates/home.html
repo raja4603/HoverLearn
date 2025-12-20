@@ -6,9 +6,9 @@
    .hero {
         height: 85vh;
         width: 100%;
-        /* This grabs the thumbnail of the 2nd video in your list */
+    
         background: linear-gradient(to right, rgba(0,0,0,0.9) 20%, rgba(0,0,0,0) 80%),
-                    url('{{ videos.1.thumbnail.url }}'); 
+                    url('{{ videos.0.thumbnail.url }}'); 
         background-size: cover;
         background-position: center top;
         display: flex;
@@ -115,10 +115,13 @@
 <!-- 1. HERO BANNER -->
 <div class="hero">
     <div class="hero-content">
-        <h1 class="hero-title">Spider-Man</h1>
-        <p class="hero-desc">
-            With great power comes great responsibility. Follow Peter Parker as he navigates life as a teenager and a superhero, protecting New York City from dangerous threats.
-        </p>
+        {% if videos %}
+        <h1 class="hero-title">{{ videos.0.title }}</h1>
+        <p class="hero-desc">{{ videos.0.description|default:"No description available." }}</p>
+        {% else %}
+        <h1 class="hero-title">Welcome to HoverLearn</h1>
+        <p class="hero-desc">Upload videos to get started.</p>
+        {% endif %}
         <div>
             <!-- FIX: We check if there are videos, and link to the FIRST one (videos.0.id) -->
             {% if videos %}
@@ -140,7 +143,7 @@
 </div>
 
 <!-- 2. CONTINUE WATCHING ROW -->
-<div class="row-title">Continue Watching</div>
+<div class="row-title">Latest Movies</div>
 <div class="video-row">
     {% for video in videos %}
     <a href="{% url 'watch' video.id %}">

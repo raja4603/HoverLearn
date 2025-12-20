@@ -3,6 +3,7 @@ from django.conf import settings
 
 class Video(models.Model):
     title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
     video_file = models.FileField(upload_to='videos/')
     subtitle_file = models.FileField(upload_to='subs/') 
     thumbnail = models.ImageField(upload_to='thumbs/', blank=True, null=True)
@@ -13,8 +14,8 @@ class Video(models.Model):
 class SavedWord(models.Model):
     word = models.CharField(max_length=100)
     meaning = models.TextField()
-    hindi = models.CharField(max_length=255, blank=True, null=True)     # Added
-    synonyms = models.TextField(blank=True, null=True)                  # Added
+    hindi = models.CharField(max_length=255, blank=True, null=True)
+    synonyms = models.TextField(blank=True, null=True)
     
     def __str__(self):
         return self.word
@@ -73,3 +74,20 @@ class WatchHistory(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.video} @ {self.last_position:.1f}s"
+
+class VideoVote(models.Model):
+    """Stores Like/Dislike for a video per user."""
+    VOTE_CHOICES = (
+        ('LIKE', 'Like'),
+        ('DISLIKE', 'Dislike'),
+    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='video_votes')
+    video = models.ForeignKey(Video, on_delete=models.CASCADE, related_name='votes')
+    vote = models.CharField(max_length=10, choices=VOTE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'video') # Ensures one vote per user per video
+
+    def __str__(self):
+        return f"{self.user} voted {self.vote} on {self.video}"

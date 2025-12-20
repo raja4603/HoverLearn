@@ -9,7 +9,7 @@ env/
 
 # DBs, media, secrets
 db.sqlite3
-media/
+#media/
 .env
 
 # Editor / OS

@@ -6,7 +6,7 @@ from django.conf import settings
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.views.decorators.http import require_POST
-from .models import Video, SavedWord, DictionaryEntry, VideoNote, WatchHistory
+from .models import Video, SavedWord, DictionaryEntry, VideoNote, WatchHistory, VideoVote
 import pysrt
 import nltk
 from django.contrib.auth import login, logout, authenticate
@@ -16,9 +16,10 @@ from nltk.corpus import wordnet
 
 # --- SETUP: Configure Gemini ---
 # Use the key you provided
-GEMINI_API_KEY = "AIzaSyCb5lfM94YMznulFTCvJlXHMqMZF4Izxf0"
+GEMINI_API_KEY = "AIzaSyCHlWLIiJXPyQIDOFX3c7B5zuEbKFlKl90"
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.0-flash') 
+# Switch model to gemini-2.0-flash as per your key
+model = genai.GenerativeModel("gemini-2.5-flash") 
 
 # Load Custom JSON
 json_path = os.path.join(settings.BASE_DIR, 'core', 'common_words.json')
@@ -60,7 +61,7 @@ def fetch_word_data(word):
         data['found'] = True
     
     else:
-        # 3. GEMINI API (Using Gemini 2.0 Flash)
+        # 3. GEMINI API
         try:
             prompt = (
                 f"Define the word '{clean_word}' in simple English. "
@@ -68,10 +69,8 @@ def fetch_word_data(word):
                 f"Return ONLY a JSON object with keys: 'definition', 'hindi', 'synonyms' (list)."
             )
             
-            # Note: Gemini 2.0 Flash is very fast.
             response = model.generate_content(prompt)
             
-            # Clean up the response text to ensure valid JSON
             text_response = response.text.replace('```json', '').replace('```', '').strip()
             ai_data = json.loads(text_response)
             
@@ -82,13 +81,12 @@ def fetch_word_data(word):
             
         except Exception as e:
             print(f"Gemini 2.0 Error: {e}")
-            # 4. NLTK FALLBACK (If Gemini fails, use offline dictionary)
+            # 4. NLTK FALLBACK
             if wordnet.synsets(clean_word):
                 synsets = wordnet.synsets(clean_word)
                 data['definition'] = synsets[0].definition()
                 data['found'] = True
                 
-                # Get synonyms from NLTK
                 raw_synonyms = []
                 for syn in synsets[:3]:
                     for lemma in syn.lemmas():
@@ -117,7 +115,7 @@ def register_view(request):
         form = UserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            login(request, user) # Log them in automatically
+            login(request, user)
             return redirect('home')
     else:
         form = UserCreationForm()
@@ -138,8 +136,6 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
-# IMPORTANT: Protect your main views!
-# Add @login_required decorator to views you want private
 @login_required(login_url='login')
 def home(request):
     q = request.GET.get('q', '').strip()
@@ -180,12 +176,22 @@ def watch_video(request, video_id):
         except (ValueError, TypeError):
             jump_timestamp = None
 
+    # --- VOTE LOGIC (Fixing persistence issue) ---
+    user_vote_obj = VideoVote.objects.filter(user=request.user, video=video).first()
+    vote_type = user_vote_obj.vote if user_vote_obj else None
+    
+    likes = VideoVote.objects.filter(video=video, vote='LIKE').count()
+    dislikes = VideoVote.objects.filter(video=video, vote='DISLIKE').count()
+
     return render(request, 'player.html', {
         'video': video,
         'subtitles': subtitle_data,
         'notes': notes,
         'last_position': last_position,
-        'jump_timestamp': jump_timestamp
+        'jump_timestamp': jump_timestamp,
+        'vote_type': vote_type, # Passes user's choice to template
+        'likes': likes,         # Passes total likes
+        'dislikes': dislikes    # Passes total dislikes
     })
 
 def get_definition(request, word):
@@ -210,25 +216,19 @@ def save_word(request, word):
 
 @login_required(login_url='login')
 def saved_list(request):
-    """Feature 8: View Saved Word List and User Video Notes"""
-    # Get all words, newest first
     words = SavedWord.objects.all().order_by('-id') 
-    # User's video notes
     notes = VideoNote.objects.filter(user=request.user).order_by('-created_at')
     return render(request, 'saved_list.html', {'words': words, 'notes': notes})
 
 def delete_word(request, word_id):
-    """Extra: Allow deleting words from the list"""
     word = get_object_or_404(SavedWord, id=word_id)
     word.delete()
-    # Return empty string to remove the row from HTML
     return HttpResponse("")
 
 
 @login_required(login_url='login')
 @require_POST
 def delete_note(request, note_id):
-    """Delete a user's note via HTMX POST and remove it from the UI."""
     note = get_object_or_404(VideoNote, id=note_id, user=request.user)
     note.delete()
     return HttpResponse("")
@@ -237,7 +237,6 @@ def delete_note(request, note_id):
 @login_required(login_url='login')
 @require_POST
 def save_note(request, video_id):
-    """Handle HTMX POST to save a user note for a video and return the refreshed notes list partial."""
     video = get_object_or_404(Video, id=video_id)
     content = request.POST.get('content', '').strip()
     timestamp = request.POST.get('timestamp', '').strip()
@@ -252,7 +251,6 @@ def save_note(request, video_id):
 
     VideoNote.objects.create(user=request.user, video=video, content=content, timestamp=ts)
 
-    # Return updated notes list partial (HTMX will swap it in)
     notes = VideoNote.objects.filter(user=request.user, video=video).order_by('-created_at')
     return render(request, 'partials/video_notes_list.html', {'notes': notes})
 
@@ -260,9 +258,6 @@ def save_note(request, video_id):
 @login_required(login_url='login')
 @require_POST
 def update_history(request):
-    """Update or create watch history for the current user and video.
-    Accepts form-encoded POST with 'video_id' and 'current_time' (seconds).
-    Returns JSON status."""
     video_id = request.POST.get('video_id') or ''
     current_time = request.POST.get('current_time') or ''
 
@@ -284,3 +279,35 @@ def update_history(request):
 
 # Backwards compatibility alias
 update_progress = update_history
+
+@login_required(login_url='login')
+def handle_vote(request, video_id, vote_type):
+    if request.method == "POST":
+        video = get_object_or_404(Video, id=video_id)
+        
+        existing_vote = VideoVote.objects.filter(user=request.user, video=video).first()
+        
+        current_vote = None
+        if existing_vote:
+            if existing_vote.vote == vote_type:
+                # Toggle OFF
+                existing_vote.delete()
+            else:
+                # Switch vote
+                existing_vote.vote = vote_type
+                existing_vote.save()
+                current_vote = vote_type
+        else:
+            # Create new vote
+            VideoVote.objects.create(user=request.user, video=video, vote=vote_type)
+            current_vote = vote_type
+            
+        likes = VideoVote.objects.filter(video=video, vote='LIKE').count()
+        dislikes = VideoVote.objects.filter(video=video, vote='DISLIKE').count()
+        
+        return render(request, 'partials/vote_buttons.html', {
+            'video': video,
+            'vote_type': current_vote,
+            'likes': likes,
+            'dislikes': dislikes
+        })
